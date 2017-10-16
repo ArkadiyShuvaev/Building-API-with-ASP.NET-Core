@@ -14,12 +14,15 @@ namespace CityInfo.API
     {
         public static void Main(string[] args)
         {
-            BuildWebHost(args).Run();
+            var host = BuildWebHost(args);
+            host.Run();
         }
 
         public static IWebHost BuildWebHost(string[] args) =>
+         
             WebHost.CreateDefaultBuilder(args)
                 .UseStartup<Startup>()
                 .Build();
+        
     }
 }
