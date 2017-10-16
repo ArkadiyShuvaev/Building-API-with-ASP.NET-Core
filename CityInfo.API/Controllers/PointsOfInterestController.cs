@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿using System.Linq;
 using CityInfo.API.Models;
+using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -92,7 +90,7 @@ namespace CityInfo.API.Controllers
 
             return CreatedAtRoute("GetPointOfInterest", new
             {
-                cityId = cityId,
+                cityId,
                 interestId = newInterestId
             }, newPointOfInterestDto);
         }
@@ -107,47 +105,119 @@ namespace CityInfo.API.Controllers
                 return actionResult;
             }
 
-            var city = CitiesDataStore.Current.Cities.FirstOrDefault(c => c.Id == cityId);
-
-            if (city == null)
+            PointOfInterestDto existingPoint;
+            if (!DoesPointOfInterestExist(cityId, interestId, out existingPoint, out actionResult))
             {
-                return NotFound(nameof(cityId));
+                return actionResult;
             }
 
-            var existingPoint = city.PointsOfInterest.FirstOrDefault(p => p.Id == interestId);
-
-            if (existingPoint == null)
-            {
-                return NotFound(nameof(interestId));
-            }
             existingPoint.Name = pointOfInterest.Name;
             existingPoint.Description = pointOfInterest.Description;
 
             return NoContent();
 
         }
+
         
-        private bool IsValidationSuccessfull(int cityId, int interestId, PointOfInterestForUpdateDto pointOfInterest,
+        [HttpPatch("{cityId}/pointsofinterest/{interestId}")]
+        public IActionResult UpdatePartialPointOfInterest(int cityId, int interestId,
+            [FromBody] JsonPatchDocument<PointOfInterestForUpdateDto> patchDocument)
+        {
+            if (patchDocument == null)
+            {
+                return BadRequest(nameof(patchDocument));
+            }
+
+            IActionResult actionResult;
+            if (!IsValidationCityAndInterestIdSuccessfull(cityId, interestId, out actionResult))
+            {
+                return actionResult;
+            }
+
+            PointOfInterestDto existingPoint;
+            if (!DoesPointOfInterestExist(cityId, interestId, out existingPoint, out actionResult))
+            {
+                return actionResult;
+            }
+
+            var pointOfInterestForUpdateDto = new PointOfInterestForUpdateDto
+            {
+                Name = existingPoint.Name,
+                Description = existingPoint.Description
+            };
+
+            patchDocument.ApplyTo(pointOfInterestForUpdateDto, ModelState);
+
+            if (!IsModelValid(pointOfInterestForUpdateDto, out actionResult))
+            {
+                return actionResult;
+            }
+            
+            var result = TryValidateModel(pointOfInterestForUpdateDto);
+            if (!result)
+            {
+                return BadRequest(pointOfInterestForUpdateDto);
+            }
+            
+            existingPoint.Name = pointOfInterestForUpdateDto.Name;
+            existingPoint.Description = pointOfInterestForUpdateDto.Description;
+
+            return NoContent();
+        }
+
+        private bool DoesPointOfInterestExist(int cityId, int interestId, out PointOfInterestDto existingPoint,
             out IActionResult actionResult)
         {
             actionResult = null;
+            existingPoint = null;
+            var city = CitiesDataStore.Current.Cities.FirstOrDefault(c => c.Id == cityId);
+
+            if (city == null)
+            {
+                {
+                    actionResult = NotFound(nameof(cityId));
+                    return false;
+                }
+            }
+
+            existingPoint = city.PointsOfInterest.FirstOrDefault(p => p.Id == interestId);
+
+            if (existingPoint == null)
+            {
+                {
+                    actionResult = NotFound(nameof(interestId));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+
+        private bool IsValidationSuccessfull(int cityId, int interestId, PointOfInterestForUpdateDto pointOfInterest,
+            out IActionResult actionResult)
+        {
+            if (!IsValidationCityAndInterestIdSuccessfull(cityId, interestId, out actionResult))
+            {
+                return false;
+            }
 
             if (pointOfInterest == null)
             {
                 actionResult = BadRequest(nameof(pointOfInterest));
                 return false;
             }
-            if (cityId <= 0)
+
+            if (!IsModelValid(pointOfInterest, out actionResult))
             {
-                actionResult = BadRequest(nameof(cityId));
-                return false;
-            }
-            if (interestId <= 0)
-            {
-                actionResult = BadRequest(nameof(interestId));
                 return false;
             }
 
+            return true;
+        }
+
+        private bool IsModelValid(PointOfInterestForUpdateDto pointOfInterest, out IActionResult actionResult)
+        {
+            actionResult = null;
             if (pointOfInterest.Name == pointOfInterest.Description)
             {
                 ModelState.AddModelError("description", "The provided description should be different from the name.");
@@ -158,7 +228,23 @@ namespace CityInfo.API.Controllers
                 actionResult = BadRequest(ModelState);
                 return false;
             }
-            
+            return true;
+        }
+
+        private bool IsValidationCityAndInterestIdSuccessfull(int cityId, int interestId, out IActionResult actionResult)
+        {
+            actionResult = null;
+
+            if (cityId <= 0)
+            {
+                actionResult = BadRequest(nameof(cityId));
+                return false;
+            }
+            if (interestId <= 0)
+            {
+                actionResult = BadRequest(nameof(interestId));
+                return false;
+            }
             return true;
         }
     }
