@@ -25,19 +25,15 @@ namespace CityInfo.API
                 .AddMvcOptions(o =>
                 {
                     o.OutputFormatters.Add(new XmlDataContractSerializerOutputFormatter());
-                })
-                //.AddJsonOptions(setup =>
-                //{
-                //    var castedResolver = setup.SerializerSettings.ContractResolver as DefaultContractResolver;
-                //    if (castedResolver != null) castedResolver.NamingStrategy = null;
-                //})
-                ;
+                });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
         {
             loggerFactory.AddConsole();
+            loggerFactory.AddDebug(LogLevel.Information);
+            
 
             if (env.IsDevelopment())
             {
