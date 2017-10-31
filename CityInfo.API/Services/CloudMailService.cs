@@ -7,11 +7,11 @@ namespace CityInfo.API.Services
     public class CloudMailService : IMailService
     {
         private readonly ILogger<CloudMailService> _logger;
-        private string _mailTo = "admin@company.com";
-        private string _mailFrom = "noreply@company.com";
+		private readonly string _mailTo = Startup.Configuration["mailSettings:mailToAddress"];
+	    private readonly string _mailFrom = Startup.Configuration["mailSettings:mailFromAddress"];
 
 
-        public CloudMailService(ILogger<CloudMailService> logger)
+		public CloudMailService(ILogger<CloudMailService> logger)
         {
             _logger = logger;
         }
