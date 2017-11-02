@@ -1,11 +1,13 @@
 ﻿
 using System;
 using CityInfo.API.Services;
+using CityInfo.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -36,19 +38,31 @@ namespace CityInfo.API
                     o.OutputFormatters.Add(new XmlDataContractSerializerOutputFormatter());
                 });
 
+	        
 	        services.AddOptions();
-
 	        services.Configure<AppOptions>(Configuration);
-			
+
+	        var connectionString = Configuration.GetConnectionString("cityInfoConnectionString");
+	        if (connectionString == null)
+	        {
+		        throw new ArgumentNullException(nameof(connectionString));
+	        }
+	        
+			services.AddDbContext<CityInfoContext>(o =>
+			{
+				o.UseSqlServer(connectionString);
+			});
+
 #if DEBUG
-            services.AddTransient<IMailService, LocalMailService>();
+			services.AddTransient<IMailService, LocalMailService>();
 #else
             services.AddTransient<IMailService, CloudMailService>();
 #endif
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory, 
+			CityInfoContext cityInfoContext)
         {
             loggerFactory.AddConsole();
             loggerFactory.AddDebug(LogLevel.Information);
@@ -65,6 +79,8 @@ namespace CityInfo.API
             {
                 app.UseExceptionHandler();
             }
+
+			cityInfoContext.EnsureSeedDataForContext();
 
             app.UseStatusCodePages();
 
