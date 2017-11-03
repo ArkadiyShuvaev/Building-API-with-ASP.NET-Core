@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using CityInfo.API.Models;
 using CityInfo.API.Services;
+using CityInfo.Data.Entities;
+using CityInfo.Data.Repositories;
 using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -16,11 +19,14 @@ namespace CityInfo.API.Controllers
     {
         private readonly ILogger<PointsOfInterestController> _logger;
         private readonly IMailService _localMailService;
+	    private readonly ICityInfoRepository _repository;
 
-        public PointsOfInterestController(ILogger<PointsOfInterestController> logger, IMailService localMailService)
+	    public PointsOfInterestController(ILogger<PointsOfInterestController> logger, 
+			IMailService localMailService, ICityInfoRepository repository)
         {
             _logger = logger;
             _localMailService = localMailService;
+	        _repository = repository;
         }
 
         [HttpGet("{cityId}/pointsofinterest")]
@@ -32,38 +38,42 @@ namespace CityInfo.API.Controllers
             {
                 return BadRequest(nameof(cityId));
             }
-            var city = CitiesDataStore.Current.Cities.FirstOrDefault(c => c.Id == cityId);
 
-            if (city == null)
-            {
-                _logger.LogInformation($"The '{cityId}' city cannot be found.");
-                return NotFound();
-            }
+	        IActionResult actionResult;
+	        if (!DoesCityExistAndLogMessage(cityId, out actionResult))
+	        {
+		        return actionResult;
+	        }
 
-            return Ok(city.PointsOfInterest);
+	        var pointsOfInterestForCity = _repository.GetPointsOfInterestForCity(cityId);
+	        var pointsResult = AutoMapper.Mapper.Map<IEnumerable<PointOfInterestDto>>(pointsOfInterestForCity);
+
+            return Ok(pointsResult);
         }
 
-        [HttpGet("{cityId}/pointsofinterest/{interestId}", Name = "GetPointOfInterest")]
+	    
+
+	    [HttpGet("{cityId}/pointsofinterest/{interestId}", Name = "GetPointOfInterest")]
         public IActionResult GetPointOfInterest(int cityId, int interestId)
         {
             if (cityId <= 0) return BadRequest(nameof(cityId));
             if (interestId <= 0) return BadRequest(nameof(interestId));
 
-            var city = CitiesDataStore.Current.Cities.FirstOrDefault(c => c.Id == cityId);
+			IActionResult actionResult;
+	        if (!DoesCityExistAndLogMessage(cityId, out actionResult))
+	        {
+		        return actionResult;
+	        }
 
-            if (city == null)
-            {
-                return NotFound(nameof(cityId));
-            }
+			var interest = _repository.GetPointOfInterestForCity(cityId, interestId);
+	        if (interest == null)
+	        {
+		        return NotFound(nameof(interestId));
+	        }
+			
+	        var result = AutoMapper.Mapper.Map<PointOfInterestDto>(interest);
 
-            var interest = city.PointsOfInterest.FirstOrDefault(i => i.Id == interestId);
-
-            if (interest == null)
-            {
-                return NotFound(nameof(interestId));
-            }
-
-            return Ok(interest);
+            return Ok(result);
         }
 
 
@@ -82,31 +92,29 @@ namespace CityInfo.API.Controllers
             {
                 return BadRequest(ModelState);
             }
-
-            var city = CitiesDataStore.Current.Cities.FirstOrDefault(c => c.Id == cityId);
-
-            if (city == null)
+			
+            if (!_repository.DoesCityExist(cityId))
             {
                 return NotFound(nameof(cityId));
             }
 
-            var points = city.PointsOfInterest;
-            var newInterestId = points.Max(c => c.Id) + 1;
+			//var city = _repository.GetCity(cityId);
 
-            var newPointOfInterestDto = new PointOfInterestDto
-            {
-                Description = pointOfInterest.Description,
-                Name = pointOfInterest.Name,
-                Id = newInterestId
-            };
-            city.PointsOfInterest.Add(newPointOfInterestDto);
+            
 
+	        var newEntity = AutoMapper.Mapper.Map<PointOfInterest>(pointOfInterest);
 
+	        if (!_repository.AddPointOfInterestForCity(cityId, newEntity))
+	        {
+		        return StatusCode(500, "Some issue has been occurred with saving item.");
+	        }
+
+	        var createdPointOfInterestToReturn = AutoMapper.Mapper.Map<PointOfInterestDto>(newEntity);
             return CreatedAtRoute("GetPointOfInterest", new
             {
                 cityId,
-                interestId = newInterestId
-            }, newPointOfInterestDto);
+                interestId = createdPointOfInterestToReturn.Id
+			}, createdPointOfInterestToReturn);
         }
 
         [HttpPut("{cityId}/pointsofinterest/{interestId}")]
@@ -118,17 +126,27 @@ namespace CityInfo.API.Controllers
             {
                 return actionResult;
             }
+			
+	        var city = _repository.GetCity(cityId, true);
+	        if (city == null)
+	        {
+		        return NotFound(nameof(city));
+	        }
 
-            PointOfInterestDto existingPoint;
-            if (!DoesPointOfInterestExist(cityId, interestId, out existingPoint, out actionResult))
-            {
-                return actionResult;
-            }
+	        var entityFromDataBase = city.PointsOfInterest.FirstOrDefault(p => p.Id == interestId);
+	        if (entityFromDataBase == null)
+	        {
+		        return NotFound(nameof(interestId));
+	        }
 
-            existingPoint.Name = pointOfInterest.Name;
-            existingPoint.Description = pointOfInterest.Description;
+	        AutoMapper.Mapper.Map(pointOfInterest, entityFromDataBase);
 
-            return NoContent();
+	        if (!_repository.Save())
+	        {
+		        return StatusCode(500, "Some issue has been occurred while updating pointOfInterest.");
+	        }
+			
+			return NoContent();
 
         }
 
@@ -143,7 +161,7 @@ namespace CityInfo.API.Controllers
             }
 
             IActionResult actionResult;
-            if (!IsValidationCityAndInterestIdSuccessfull(cityId, interestId, out actionResult))
+            if (!AreCityAndInterestIdParametersValid(cityId, interestId, out actionResult))
             {
                 return actionResult;
             }
@@ -183,7 +201,7 @@ namespace CityInfo.API.Controllers
         public IActionResult DeletePointOfInterest(int cityId, int interestId)
         {
             IActionResult actionResult;
-            if (!IsValidationCityAndInterestIdSuccessfull(cityId, interestId, out actionResult))
+            if (!AreCityAndInterestIdParametersValid(cityId, interestId, out actionResult))
             {
                 return actionResult;
             }
@@ -210,7 +228,20 @@ namespace CityInfo.API.Controllers
             return NoContent();
         }
 
-        private bool DoesPointOfInterestExist(int cityId, int interestId, out PointOfInterestDto existingPoint,
+	    private bool DoesCityExistAndLogMessage(int cityId, out IActionResult actionResult)
+	    {
+		    actionResult = null;
+			if (_repository.DoesCityExist(cityId))
+		    {
+			    return true;
+		    }
+		    
+			_logger.LogInformation($"City with id {cityId} was not found when accessing points of interest.");
+		    
+			actionResult = NotFound(nameof(cityId));
+			return false;
+		}
+		private bool DoesPointOfInterestExist(int cityId, int interestId, out PointOfInterestDto existingPoint,
             out IActionResult actionResult)
         {
             actionResult = null;
@@ -241,7 +272,7 @@ namespace CityInfo.API.Controllers
         private bool IsValidationSuccessfull(int cityId, int interestId, PointOfInterestForUpdateDto pointOfInterest,
             out IActionResult actionResult)
         {
-            if (!IsValidationCityAndInterestIdSuccessfull(cityId, interestId, out actionResult))
+            if (!AreCityAndInterestIdParametersValid(cityId, interestId, out actionResult))
             {
                 return false;
             }
@@ -276,7 +307,7 @@ namespace CityInfo.API.Controllers
             return true;
         }
 
-        private bool IsValidationCityAndInterestIdSuccessfull(int cityId, int interestId, out IActionResult actionResult)
+        private bool AreCityAndInterestIdParametersValid(int cityId, int interestId, out IActionResult actionResult)
         {
             actionResult = null;
 

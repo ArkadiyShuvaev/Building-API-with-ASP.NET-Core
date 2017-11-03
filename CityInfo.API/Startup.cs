@@ -1,7 +1,11 @@
 ﻿
 using System;
+using AutoMapper;
+using CityInfo.API.Models;
 using CityInfo.API.Services;
 using CityInfo.Data;
+using CityInfo.Data.Entities;
+using CityInfo.Data.Repositories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -10,6 +14,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
 
@@ -53,6 +58,8 @@ namespace CityInfo.API
 				o.UseSqlServer(connectionString);
 			});
 
+	        services.AddScoped<ICityInfoRepository, CityInfoRepository>();
+
 #if DEBUG
 			services.AddTransient<IMailService, LocalMailService>();
 #else
@@ -86,12 +93,16 @@ namespace CityInfo.API
 
             app.UseMvc();
 
+	        
+	        AutoMapper.Mapper.Initialize(conf =>
+	        {
+		        conf.CreateMap<City, CityWithoutPOintsOfInterestDto>();
+		        conf.CreateMap<City, CityDto>();
+		        conf.CreateMap<PointOfInterest, PointOfInterestDto>();
+		        conf.CreateMap<PointOfInterestForCreationDto, PointOfInterest>();
+		        conf.CreateMap<PointOfInterestForUpdateDto, PointOfInterest>();
+			});
 
-            //app.Run(async (context) =>
-            //{
-            //    //throw new Exception("Example exception");
-            //    await context.Response.WriteAsync("Hello World!");
-            //});
         }
     }
 }
