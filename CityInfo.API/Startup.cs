@@ -101,6 +101,7 @@ namespace CityInfo.API
 		        conf.CreateMap<PointOfInterest, PointOfInterestDto>();
 		        conf.CreateMap<PointOfInterestForCreationDto, PointOfInterest>();
 		        conf.CreateMap<PointOfInterestForUpdateDto, PointOfInterest>();
+		        conf.CreateMap<PointOfInterest, PointOfInterestForUpdateDto>();
 			});
 
         }

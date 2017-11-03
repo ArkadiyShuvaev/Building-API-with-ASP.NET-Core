@@ -13,5 +13,6 @@ namespace CityInfo.Data.Repositories
 		bool AddPointOfInterestForCity(int cityId, PointOfInterest newEntity);
 		
 		bool Save();
+		bool DeletePointOfInterest(PointOfInterest existingPoint);
 	}
 }

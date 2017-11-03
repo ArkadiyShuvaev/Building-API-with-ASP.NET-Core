@@ -61,6 +61,11 @@ namespace CityInfo.Data.Repositories
 		{
 			return _context.SaveChanges() >= 0;
 		}
-		
+
+		public bool DeletePointOfInterest(PointOfInterest existingPoint)
+		{
+			_context.PointsOfInterest.Remove(existingPoint);
+			return Save();
+		}
 	}
 }
